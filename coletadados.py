@@ -1,6 +1,6 @@
 import requests
 import os
-from urlsColetas import *
+from urls import *
 import pandas as pd
 
 

@@ -1,0 +1,5 @@
+url1 = f"https://www.ssp.sp.gov.br/assets/estatistica/transparencia/spDados/SPDadosCriminais_2025.xlsx"
+url2 = f"https://www.ssp.sp.gov.br/assets/estatistica/transparencia/spDados/DadosProdutividade_2025.xlsx"
+url3 = f"https://www.ssp.sp.gov.br/assets/estatistica/transparencia/baseDados/celularesSub/CelularesSubtraidos_2025.xlsx"
+url4 = f"https://www.ssp.sp.gov.br/assets/estatistica/transparencia/baseDados/veiculosSub/VeiculosSubtraidos_2025.xlsx"
+url5 = f"https://www.ssp.sp.gov.br/assets/estatistica/transparencia/baseDados/objetosSub/ObjetosSubtraidos_2025.xlsx"

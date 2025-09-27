@@ -18,3 +18,19 @@ exemplo de uso para inserir ou atualizar a tabela dadoscriminais:
 inserir_dados_sqlite(filtrar_colunas_excel('SPDadosCriminais_2025.xlsx', ['NUM_BO', 'DATA_REGISTRO', 'DATA_OCORRENCIA_BO', 'HORA_OCORRENCIA_BO', 'LATITUDE', 'LONGITUDE', 'NATUREZA_APURADA'], -1), 'dados.db', 'dadoscriminais', 'NUM_BO')
 
 não é necessário se preocupar em relação a dados repetidos, a função já trata isso.
+
+
+
+
+
+
+
+
+
+banco de dados tem a tabela 'atualizacao'
+com as seguintes colunas:
+colunas = {
+    'id': 'INTEGER PRIMARY KEY AUTOINCREMENT',
+    'TABELA': 'TEXT',
+    'DATA_ATUALIZACAO': 'TEXT',
+}

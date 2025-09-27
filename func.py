@@ -1,5 +1,12 @@
 import sqlite3
 
+
+
+
+
+
+
+
 def criar_tabela_sqlite(nome_banco, nome_tabela, colunas):
     """
     Cria uma tabela em um banco de dados SQLite.
@@ -12,17 +19,15 @@ def criar_tabela_sqlite(nome_banco, nome_tabela, colunas):
     Exemplo:
     criar_tabela_sqlite('clientes.db', 'usuarios', {'id': 'INTEGER PRIMARY KEY', 'nome': 'TEXT', 'email': 'TEXT'})
     """
-    # Monta a string de colunas (ex: "id INTEGER PRIMARY KEY, nome TEXT, email TEXT")
     definicao_colunas = ', '.join([f"{col} {tipo}" for col, tipo in colunas.items()])
 
-    # Comando SQL de criação
     sql = f"CREATE TABLE IF NOT EXISTS {nome_tabela} ({definicao_colunas});"
 
-    # Conecta e executa
     with sqlite3.connect(nome_banco) as conn:
         cursor = conn.cursor()
         cursor.execute(sql)
         conn.commit()
+
 
 
 
@@ -46,18 +51,14 @@ def inserir_dados_sqlite(df, nome_banco, nome_tabela, campo_chave):
     if campo_chave not in df.columns:
         raise ValueError(f"O campo chave '{campo_chave}' não existe no DataFrame.")
 
-    # Conecta ao banco
     with sqlite3.connect(nome_banco) as conn:
         cursor = conn.cursor()
 
-        # Recupera os valores únicos já existentes no banco para o campo chave
         cursor.execute(f"SELECT {campo_chave} FROM {nome_tabela}")
         registros_existentes = {str(row[0]) for row in cursor.fetchall()}
 
-        # Filtra o DataFrame para manter apenas os registros NOVOS
         df_filtrado = df[~df[campo_chave].astype(str).isin(registros_existentes)]
 
-        # Se houver registros novos, insere
         if not df_filtrado.empty:
             df_filtrado.to_sql(nome_tabela, conn, if_exists='append', index=False)
             print(f"{len(df_filtrado)} novos registros inseridos.")
@@ -75,9 +76,86 @@ def inserir_dados_sqlite(df, nome_banco, nome_tabela, campo_chave):
 
 
 
-def consultar_todos_os_dados(nome_banco, nome_tabela, limite=None, campo_ordenacao='id'):
+
+def inserir_dados_simples(nome_banco, nome_tabela, dados, colunas):
     """
-    Executa SELECT * FROM nome_tabela e retorna os dados como lista de tuplas.
+    Insere dados em uma tabela SQLite.
+
+    Parâmetros:
+    - nome_banco (str): caminho do banco SQLite.
+    - nome_tabela (str): nome da tabela.
+    - dados (list de listas ou tuplas): dados a inserir.
+    - colunas (list de str): nomes das colunas, na mesma ordem dos dados.
+    """
+    with sqlite3.connect(nome_banco) as conn:
+        cursor = conn.cursor()
+
+        placeholders = ', '.join(['?'] * len(colunas))
+        sql = f"INSERT INTO {nome_tabela} ({', '.join(colunas)}) VALUES ({placeholders})"
+
+        cursor.executemany(sql, dados)
+        conn.commit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def atualizar_valor(nome_banco, nome_tabela, coluna_alvo, novo_valor, coluna_filtro, valor_filtro):
+    """
+    Atualiza um valor específico em uma tabela SQLite.
+
+    Parâmetros:
+    - nome_banco (str): caminho do banco de dados.
+    - nome_tabela (str): nome da tabela onde será feita a atualização.
+    - coluna_alvo (str): nome da coluna que terá seu valor alterado.
+    - novo_valor: novo valor a ser atribuído.
+    - coluna_filtro (str): nome da coluna usada como condição (ex: 'nome').
+    - valor_filtro: valor usado para filtrar qual registro atualizar.
+    """
+    with sqlite3.connect(nome_banco) as conn:
+        cursor = conn.cursor()
+        sql = f"""
+        UPDATE {nome_tabela}
+        SET {coluna_alvo} = ?
+        WHERE {coluna_filtro} = ?
+        """
+        cursor.execute(sql, (novo_valor, valor_filtro))
+        conn.commit()
+        print(f"Atualizado: {coluna_alvo} = {novo_valor} onde {coluna_filtro} = {valor_filtro}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def consultar_todos_os_dados(nome_banco, nome_tabela, limite=None, campo_ordenacao='id', coluna=None):
+    """
+    Executa SELECT na tabela e retorna os dados como lista de tuplas ou valores únicos, conforme a coluna.
 
     Parâmetros:
     - nome_banco (str): Caminho para o banco de dados SQLite.
@@ -87,29 +165,72 @@ def consultar_todos_os_dados(nome_banco, nome_tabela, limite=None, campo_ordenac
         * Se negativo: retorna os últimos N registros (ordem decrescente, revertida para manter ordem original).
         * Se None: retorna todos.
     - campo_ordenacao (str): Nome da coluna para ordenar (usado ao buscar os últimos).
+    - coluna (str, opcional): Nome de uma coluna específica a retornar. Se None, retorna todas.
 
     Retorna:
-    - list[tuple]: Lista de registros da tabela.
+    - list: Lista de tuplas (com SELECT *) ou lista de valores (se coluna for usada).
     """
     with sqlite3.connect(nome_banco) as conn:
         cursor = conn.cursor()
 
+        # Selecione a coluna específica ou todas
+        seletor = coluna if coluna else '*'
+
         if limite is None:
-            query = f"SELECT * FROM {nome_tabela}"
+            query = f"SELECT {seletor} FROM {nome_tabela}"
         elif limite > 0:
-            query = f"SELECT * FROM {nome_tabela} LIMIT {limite}"
+            query = f"SELECT {seletor} FROM {nome_tabela} LIMIT {limite}"
         else:
-            # Para negativos: ORDER BY decrescente + LIMIT, depois inverter resultado
-            query = f"SELECT * FROM {nome_tabela} ORDER BY {campo_ordenacao} DESC LIMIT {abs(limite)}"
+            query = f"SELECT {seletor} FROM {nome_tabela} ORDER BY {campo_ordenacao} DESC LIMIT {abs(limite)}"
 
         cursor.execute(query)
         dados = cursor.fetchall()
 
-        # Se limite for negativo, reverter resultado para manter ordem "natural"
+        # Inverte se limite negativo (para manter ordem original)
         if limite and limite < 0:
             dados.reverse()
 
+        # Se for uma coluna única, achata a lista (tirar do formato [(a,), (b,), (c,)] → [a, b, c])
+        if coluna:
+            dados = [d[0] for d in dados]
+
     return dados
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def deletar_registro(nome_banco, nome_tabela, coluna_chave, valor_chave):
+    """
+    Deleta um registro da tabela onde coluna_chave == valor_chave.
+
+    Parâmetros:
+    - nome_banco (str): caminho do banco SQLite.
+    - nome_tabela (str): nome da tabela.
+    - coluna_chave (str): coluna usada como filtro (ex: 'id' ou 'nome').
+    - valor_chave: valor para identificar o registro a deletar.
+    """
+    with sqlite3.connect(nome_banco) as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM {nome_tabela} WHERE {coluna_chave} = ?", (valor_chave,))
+        conn.commit()
+        print(f"Registro(s) com {coluna_chave} = '{valor_chave}' removido(s).")
+
+
 
 
 

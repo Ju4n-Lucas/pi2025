@@ -39,14 +39,15 @@ def criar_tabela_sqlite(nome_banco, nome_tabela, colunas):
 
 def inserir_dados_sqlite(df, nome_banco, nome_tabela, campo_chave):
     """
-    Insere os dados de um DataFrame em uma tabela SQLite,
-    evitando duplicatas com base em um campo chave (ex: 'DATA_REGISTRO' ou 'NUM_BO').
+    Insere os dados de um DataFrame em uma tabela SQLite, com base apenas na ordem das colunas.
+    O nome das colunas no DataFrame não é considerado — apenas a ordem.
+    A função detecta automaticamente as colunas da tabela SQLite (exceto colunas autoincrementadas como 'id').
 
     Parâmetros:
-    - df (pd.DataFrame): DataFrame com os dados a inserir.
-    - nome_banco (str): Caminho do banco SQLite.
-    - nome_tabela (str): Nome da tabela de destino.
-    - campo_chave (str): Nome da coluna usada para verificar duplicação (comparação como string).
+    - df: DataFrame com os dados, na ordem exata esperada pela tabela (sem incluir colunas como 'id').
+    - nome_banco: Caminho para o banco SQLite.
+    - nome_tabela: Nome da tabela no banco.
+    - campo_chave: Nome da coluna no df usada para evitar duplicatas.
     """
     if campo_chave not in df.columns:
         raise ValueError(f"O campo chave '{campo_chave}' não existe no DataFrame.")
@@ -54,14 +55,47 @@ def inserir_dados_sqlite(df, nome_banco, nome_tabela, campo_chave):
     with sqlite3.connect(nome_banco) as conn:
         cursor = conn.cursor()
 
+        # Verifica se a tabela existe
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (nome_tabela,))
+        if not cursor.fetchone():
+            raise ValueError(f"A tabela '{nome_tabela}' não existe no banco de dados.")
+
+        # Descobre as colunas da tabela, exceto colunas AUTOINCREMENT (como 'id')
+        cursor.execute(f"PRAGMA table_info({nome_tabela})")
+        colunas_tabela = [col[1] for col in cursor.fetchall() if col[5] == 0]  # col[5] == 1 indica PK (ex: 'id')
+
+        if len(colunas_tabela) != df.shape[1]:
+            raise ValueError(f"Quantidade de colunas no DataFrame ({df.shape[1]}) não bate com a tabela ({len(colunas_tabela)}): {colunas_tabela}")
+
+        # Prepara SQL
+        placeholders = ','.join(['?'] * len(colunas_tabela))
+        colunas_str = ','.join(colunas_tabela)
+        sql = f"INSERT INTO {nome_tabela} ({colunas_str}) VALUES ({placeholders})"
+
+        # Verifica se a tabela está vazia
+        cursor.execute(f"SELECT COUNT(*) FROM {nome_tabela}")
+        qtd_registros = cursor.fetchone()[0]
+
+        # Prepara os dados na ordem original do DataFrame
+        valores = df.itertuples(index=False, name=None)
+
+        if qtd_registros == 0:
+            cursor.executemany(sql, valores)
+            conn.commit()
+            print(f"Tabela '{nome_tabela}' estava vazia. {df.shape[0]} registros inseridos.")
+            return
+
+        # Tabela já tem dados: verificar duplicatas
         cursor.execute(f"SELECT {campo_chave} FROM {nome_tabela}")
         registros_existentes = {str(row[0]) for row in cursor.fetchall()}
 
         df_filtrado = df[~df[campo_chave].astype(str).isin(registros_existentes)]
 
         if not df_filtrado.empty:
-            df_filtrado.to_sql(nome_tabela, conn, if_exists='append', index=False)
-            print(f"{len(df_filtrado)} novos registros inseridos.")
+            valores_filtrados = df_filtrado.itertuples(index=False, name=None)
+            cursor.executemany(sql, valores_filtrados)
+            conn.commit()
+            print(f"{df_filtrado.shape[0]} novos registros inseridos.")
         else:
             print("Nenhum novo registro a inserir — todos já existem.")
 
@@ -259,6 +293,117 @@ def eliminar_tabela(nome_banco, nome_tabela):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def limpar_tabela(banco, nome_tabela):
+    try:
+        conn = sqlite3.connect(banco)
+        cursor = conn.cursor()
+
+        cursor.execute(f'DELETE FROM {nome_tabela};')
+
+        cursor.execute(f'DELETE FROM sqlite_sequence WHERE name="{nome_tabela}";')
+
+        conn.commit()
+        conn.close()
+        print(f'Tabela "{nome_tabela}" limpa com sucesso.')
+    except sqlite3.Error as e:
+        print(f'Erro ao limpar a tabela: {e}')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def listar_tabelas(caminho_db='dados.db'):
+    try:
+        conn = sqlite3.connect(caminho_db)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+        tabelas = cursor.fetchall()
+
+        conn.close()
+
+        return [t[0] for t in tabelas]
+
+    except sqlite3.Error as e:
+        print(f'Erro ao listar tabelas: {e}')
+        return []
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def listar_colunas(banco, nome_tabela):
+    try:
+        conn = sqlite3.connect(banco)
+        cursor = conn.cursor()
+
+        cursor.execute(f'PRAGMA table_info({nome_tabela});')
+        colunas_info = cursor.fetchall()
+
+        conn.close()
+
+        nomes_colunas = [coluna[1] for coluna in colunas_info]
+        return nomes_colunas
+
+    except sqlite3.Error as e:
+        print(f'Erro ao listar colunas da tabela "{nome_tabela}": {e}')
+        return []
 
 
 
